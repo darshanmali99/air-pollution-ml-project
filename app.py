@@ -1,220 +1,179 @@
-import pandas as pd
-import pickle
-import random
 import json
-from flask import Flask, render_template, request, jsonify
-from datetime import datetime, timedelta
+import pickle
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import pandas as pd
+from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
-# ---------- LOAD MODELS ----------
-model_no2 = pickle.load(open("model_no2.pkl", "rb"))
-model_o3 = pickle.load(open("model_o3.pkl", "rb"))
+BASE_DIR = Path(__file__).resolve().parent
+FEATURE_COLUMNS = [
+    "T_forecast",
+    "q_forecast",
+    "u_forecast",
+    "v_forecast",
+    "w_forecast",
+    "NO2_satellite",
+    "HCHO_satellite",
+]
+SUPPORTED_SITES = range(1, 8)
 
-# ---------- AQI ----------
-def calculate_aqi(no2, o3):
+
+class ModelRegistry:
+    def __init__(self, model_dir: Path) -> None:
+        self.model_dir = model_dir
+        self.model_no2 = None
+        self.model_o3 = None
+
+    def load(self) -> None:
+        no2_path = self.model_dir / "model_no2.pkl"
+        o3_path = self.model_dir / "model_o3.pkl"
+
+        if not no2_path.exists() or not o3_path.exists():
+            raise FileNotFoundError("Model files not found. Expected model_no2.pkl and model_o3.pkl.")
+
+        with no2_path.open("rb") as f:
+            self.model_no2 = pickle.load(f)
+        with o3_path.open("rb") as f:
+            self.model_o3 = pickle.load(f)
+
+
+model_registry = ModelRegistry(BASE_DIR)
+model_registry.load()
+
+
+def calculate_aqi(no2: float, o3: float) -> float:
     return round((no2 * 0.6) + (o3 * 0.4), 2)
 
-def get_status(aqi):
+
+def get_status(aqi: float) -> str:
     if aqi <= 50:
-        return "Good", "green"
-    elif aqi <= 100:
-        return "Moderate", "orange"
-    else:
-        return "Poor", "red"
+        return "Good"
+    if aqi <= 100:
+        return "Moderate"
+    return "Poor"
 
-# ---------- SYSTEM ADVICE ----------
-def get_advice(status):
-    if status == "Good":
-        return """Air quality is GOOD.
 
-✔ Safe for outdoor activities  
-✔ Ideal for all age groups  
-✔ No health risks  
+def get_advice(status: str) -> str:
+    advice_map = {
+        "Good": "Air quality is good. Outdoor activities are generally safe.",
+        "Moderate": "Air quality is moderate. Sensitive groups should limit prolonged outdoor exposure.",
+        "Poor": "Air quality is poor. Limit outdoor activities and use protective measures.",
+    }
+    return advice_map.get(status, "Monitor local air quality before outdoor activities.")
 
-Recommendation:
-Enjoy outdoor activities freely."""
-    
-    elif status == "Moderate":
-        return """Air quality is MODERATE.
 
-⚠ Sensitive individuals may feel discomfort  
-⚠ Avoid long outdoor exposure  
+def load_site_data(site: int) -> pd.DataFrame:
+    if site not in SUPPORTED_SITES:
+        raise ValueError(f"Invalid site '{site}'. Supported sites: 1-7.")
 
-Safety:
-- Reduce outdoor exercise  
-- Stay hydrated  
-- Use mask if needed"""
-    
-    else:
-        return """Air quality is POOR.
+    data_path = BASE_DIR / f"site_{site}_unseen_input_data.csv"
+    if not data_path.exists():
+        raise FileNotFoundError(f"Data file missing for site {site}: {data_path.name}")
 
-🚨 High health risk  
-🚨 Harmful for lungs  
+    df = pd.read_csv(data_path)
+    missing_columns = [col for col in FEATURE_COLUMNS if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Missing required columns for site {site}: {missing_columns}")
 
-Immediate actions:
-- Avoid outdoor activities  
-- Wear N95 mask  
-- Stay indoors  
-- Use air purifiers"""
+    return df.fillna(df.mean(numeric_only=True))
 
-# ---------- HOME ----------
-@app.route('/')
+
+def build_features(site: int, payload: Dict[str, Optional[float]]) -> List[List[float]]:
+    custom_input_present = payload.get("temp") is not None and payload.get("humidity") is not None and payload.get("wind") is not None
+
+    if custom_input_present:
+        return [[
+            float(payload["temp"]),
+            float(payload["humidity"]),
+            float(payload["wind"]),
+            0.0,
+            0.0,
+            float(payload.get("sat_no2") or 0.0),
+            float(payload.get("hcho") or 0.0),
+        ]]
+
+    df = load_site_data(site)
+    return [df[FEATURE_COLUMNS].iloc[0].astype(float).tolist()]
+
+
+def predict_for_site(site: int) -> Dict[str, float]:
+    df = load_site_data(site)
+    features = [df[FEATURE_COLUMNS].iloc[0].astype(float).tolist()]
+    no2 = float(model_registry.model_no2.predict(features)[0])
+    o3 = float(model_registry.model_o3.predict(features)[0])
+    return {"no2": round(no2, 2), "o3": round(o3, 2), "aqi": calculate_aqi(no2, o3)}
+
+
+@app.get("/")
 def home():
-    return render_template('home.html')
+    return render_template("dashboard.html")
 
-# ---------- PREDICT ----------
-@app.route('/predict', methods=['GET','POST'])
+
+@app.post("/predict")
 def predict():
+    try:
+        payload = request.get_json(silent=True) or request.form.to_dict()
+        site = int(payload.get("site", 1))
 
-    if request.method == 'POST':
+        features = build_features(site=site, payload=payload)
+        no2 = float(model_registry.model_no2.predict(features)[0])
+        o3 = float(model_registry.model_o3.predict(features)[0])
 
-        site = request.form.get("site", "1")
-
-        # LOAD DATA
-        df = pd.read_csv(f"site_{site}_unseen_input_data.csv")
-        df = df.fillna(df.mean())
-
-        X = df[['T_forecast','q_forecast','u_forecast',
-                'v_forecast','w_forecast',
-                'NO2_satellite','HCHO_satellite']]
-
-        # USER INPUT
-        temp = request.form.get("temp")
-        humidity = request.form.get("humidity")
-        wind = request.form.get("wind")
-        sat_no2 = request.form.get("sat_no2")
-        hcho = request.form.get("hcho")
-
-        # USE INPUT OR DEFAULT DATA
-        if temp and humidity and wind:
-            features = [[
-                float(temp),
-                float(humidity),
-                float(wind),
-                0, 0,
-                float(sat_no2 or 0),
-                float(hcho or 0)
-            ]]
-        else:
-            features = X.iloc[0].values.reshape(1,-1)
-
-        # ---------- PREDICTION ----------
-        no2 = model_no2.predict(features)[0]
-        o3 = model_o3.predict(features)[0]
-
-        # ---------- AQI ----------
         aqi = calculate_aqi(no2, o3)
-        status, color = get_status(aqi)
-        advice = get_advice(status)
+        status = get_status(aqi)
 
-        # ---------- SITE COMPARISON ----------
-        site_aqi = {}
-
-        for i in range(1, 8):
+        site_comparison = {}
+        for site_id in SUPPORTED_SITES:
             try:
-                temp_df = pd.read_csv(f"site_{i}_unseen_input_data.csv")
-                temp_df = temp_df.fillna(temp_df.mean())
-
-                temp_X = temp_df[['T_forecast','q_forecast','u_forecast',
-                                  'v_forecast','w_forecast',
-                                  'NO2_satellite','HCHO_satellite']]
-
-                temp_features = temp_X.iloc[0].values.reshape(1,-1)
-
-                temp_no2 = model_no2.predict(temp_features)[0]
-                temp_o3 = model_o3.predict(temp_features)[0]
-
-                temp_aqi = calculate_aqi(temp_no2, temp_o3)
-
-                site_aqi[f"Site {i}"] = round(temp_aqi, 2)
-
-            except:
+                result = predict_for_site(site_id)
+                site_comparison[f"Site {site_id}"] = result["aqi"]
+            except (FileNotFoundError, ValueError):
                 continue
 
-        best_site = min(site_aqi, key=site_aqi.get)
-        worst_site = max(site_aqi, key=site_aqi.get)
+        if not site_comparison:
+            raise RuntimeError("No site data available for comparison.")
 
-        # ---------- FORECAST ----------
-        trend = [round(no2 + random.uniform(-5,5),2) for _ in range(24)]
-        o3_trend = [round(o3 + random.uniform(-5,5),2) for _ in range(24)]
+        best_site = min(site_comparison, key=site_comparison.get)
+        worst_site = max(site_comparison, key=site_comparison.get)
 
-        timestamps = [
-            (datetime.now() + timedelta(hours=i)).strftime("%H:%M")
-            for i in range(24)
-        ]
+        return jsonify({
+            "success": True,
+            "input": {"site": site},
+            "prediction": {
+                "no2": round(no2, 2),
+                "o3": round(o3, 2),
+                "aqi": aqi,
+                "status": status,
+                "advice": get_advice(status),
+            },
+            "site_comparison": {
+                "aqi_by_site": site_comparison,
+                "best_site": best_site,
+                "worst_site": worst_site,
+            },
+        })
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+    except FileNotFoundError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 404
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"Internal server error: {exc}"}), 500
 
-        best_time = timestamps[trend.index(min(trend))]
-        last_updated = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
-        # ---------- STORE FOR CHATBOT ----------
-        global last_aqi, last_status, last_advice
-        last_aqi = aqi
-        last_status = status
-        last_advice = advice
+@app.get("/metrics")
+def metrics():
+    metrics_path = BASE_DIR / "metrics.json"
+    if not metrics_path.exists():
+        return jsonify({"success": False, "error": "metrics.json not found."}), 404
 
-        return render_template(
-            "predict.html",
-            result=round(no2,2),
-            o3=round(o3,2),
-            aqi=aqi,
-            status=status,
-            color=color,
-            advice=advice,
-            trend=trend,
-            o3_trend=o3_trend,
-            timestamps=timestamps,
-            best_time=best_time,
-            last_updated=last_updated,
-            site=site,
+    with metrics_path.open() as f:
+        metrics_data = json.load(f)
 
-            # NEW FEATURE
-            site_aqi=site_aqi,
-            best_site=best_site,
-            worst_site=worst_site
-        )
+    return jsonify({"success": True, "metrics": metrics_data})
 
-    return render_template("predict.html")
 
-# ---------- DASHBOARD ----------
-@app.route('/dashboard')
-def dashboard():
-    with open("metrics.json") as f:
-        metrics = json.load(f)
-
-    with open("feature_importance.json") as f:
-        features = json.load(f)
-
-    return render_template('dashboard.html',
-                           metrics=metrics,
-                           features=features)
-
-# ---------- CHATBOT ----------
-@app.route('/chat', methods=['POST'])
-def chat():
-    msg = request.form.get("message","").lower()
-
-    global last_aqi, last_status, last_advice
-
-    if "aqi" in msg:
-        reply = f"Current AQI is {last_aqi} ({last_status})."
-
-    elif "safe" in msg:
-        reply = last_advice
-
-    elif "what should i do" in msg:
-        reply = f"Based on AQI {last_aqi}, I recommend:\n{last_advice}"
-
-    else:
-        reply = "I analyze air quality and give health recommendations."
-
-    return jsonify({"reply": reply})
-
-# ---------- ABOUT ----------
-@app.route('/about')
-def about():
-    return render_template('about.html')
-
-# ---------- RUN ----------
 if __name__ == "__main__":
     app.run(debug=True)
