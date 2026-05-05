@@ -76,9 +76,26 @@ def home():
 def predict():
     global LAST_AQI, LAST_STATUS
 
-    temp, hum = get_weather()
-    no2, o3 = get_pollution()
+    payload = request.get_json() or {}
 
+    # ✅ TAKE USER INPUT FIRST
+    no2 = float(payload.get("no2", 0))
+    o3 = float(payload.get("o3", 0))
+
+    temp = float(payload.get("temp", 0))
+    humidity = float(payload.get("humidity", 0))
+
+    # ✅ IF USER DID NOT ENTER → USE LIVE API
+    if no2 == 0 or o3 == 0:
+        pollution = get_pollution()
+        no2 = pollution["no2"]
+        o3 = pollution["o3"]
+
+    if temp == 0 or humidity == 0:
+        t, h = get_weather()
+        temp, humidity = t, h
+
+    # ✅ CALCULATE AQI
     aqi = calc_aqi(no2, o3)
     status = get_status(aqi)
 
