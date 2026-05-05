@@ -41,17 +41,33 @@
       <article class="lg:col-span-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
         <h2 class="text-lg font-semibold mb-2">Predict Air Quality</h2>
         <form id="predictForm" class="space-y-3">
-          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="site" type="number" min="1" max="7" value="1" placeholder="Site (1-7)" />
-          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="temp" type="number" step="any" placeholder="Temperature (optional)" />
-          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="humidity" type="number" step="any" placeholder="Humidity (optional)" />
-          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="wind" type="number" step="any" placeholder="Wind (optional)" />
-          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="sat_no2" type="number" step="any" placeholder="NO2 Satellite (optional)" />
-          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="hcho" type="number" step="any" placeholder="HCHO Satellite (optional)" />
-          <button id="submitBtn" class="w-full rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-semibold py-2.5 transition disabled:opacity-60 flex items-center justify-center gap-2">
-            <svg id="spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-            <span id="btnText">Run Prediction</span>
-          </button>
-        </form>
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="site" type="number" min="1" max="7" value="1" placeholder="Site (1-7)" />
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="temp" type="number" step="any" placeholder="Temperature (optional)" />
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="humidity" type="number" step="any" placeholder="Humidity (optional)" />
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="wind" type="number" step="any" placeholder="Wind (optional)" />
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="sat_no2" type="number" step="any" placeholder="NO2 Satellite (optional)" />
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="hcho" type="number" step="any" placeholder="HCHO Satellite (optional)" />
+
+  <!-- 🔥 ADD THESE TWO LINES EXACTLY HERE -->
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="no2" type="number" step="any" placeholder="Manual NO2 (important)" />
+
+  <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="o3" type="number" step="any" placeholder="Manual O3 (important)" />
+
+  <button id="submitBtn" class="w-full rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-semibold py-2.5 transition disabled:opacity-60 flex items-center justify-center gap-2">
+    <svg id="spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+    </svg>
+    <span id="btnText">Run Prediction</span>
+  </button>
+
+</form>
 
         <div class="mt-6 border-t border-slate-800 pt-4">
           <h3 class="text-md font-semibold mb-2">AI Chatbot</h3>
