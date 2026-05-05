@@ -48,8 +48,8 @@
       </article>
     </section>
 
-    <section class="grid grid-cols-1 lg:grid-cols-10 gap-5">
-      <article class="lg:col-span-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <article class="lg:col-span-4 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
         <h2 class="text-lg font-semibold">Predict Air Quality</h2>
         <p class="text-sm text-slate-400 mt-1 mb-4">Enter custom weather fields or use site defaults.</p>
         <form id="predictForm" class="space-y-3">
@@ -77,6 +77,10 @@
           <canvas id="aqiChart"></canvas>
         </div>
         <div id="map" class="h-full rounded-xl border border-slate-700"></div>
+      <article class="lg:col-span-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
+        <h2 class="text-lg font-semibold">Site AQI Comparison</h2>
+        <p class="text-sm text-slate-400 mt-1 mb-4">Cross-site AQI snapshot for operational decisions.</p>
+        <div class="h-80"><canvas id="aqiChart"></canvas></div>
       </article>
     </section>
   </div>
@@ -165,6 +169,8 @@ function renderChart(aqiBySite) {
   const values = Object.values(aqiBySite || {});
   const safeLabels = labels.length >= 3 ? labels : ['Site 1','Site 2','Site 3','Site 4','Site 5','Site 6','Site 7'];
   const safeValues = labels.length >= 3 ? values : [50, 60, 55, 70, 65, 58, 62];
+  const safeLabels = labels.length ? labels : ['No Data'];
+  const safeValues = values.length ? values : [0];
 
   if (chart) {
     chart.destroy();
