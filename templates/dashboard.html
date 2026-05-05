@@ -282,9 +282,20 @@ qs('predictForm').addEventListener('submit', async (e) => {
   setLoading(true);
 
   try {
-    const formData = new FormData(e.target);
-    const payload = Object.fromEntries(formData.entries());
-    Object.keys(payload).forEach((k) => payload[k] === '' && delete payload[k]);
+    const form = e.target;
+
+    const payload = {
+      site: Number(form.site.value || 1),
+      temp: Number(form.temp.value || 0),
+      humidity: Number(form.humidity.value || 0),
+      wind: Number(form.wind.value || 0),
+      sat_no2: Number(form.sat_no2.value || 0),
+      hcho: Number(form.hcho.value || 0),
+
+      // 🔥 FIX (IMPORTANT)
+      no2: Number(form.no2.value || 0),
+      o3: Number(form.o3.value || 0)
+    };
 
     const response = await fetch('/predict', {
       method: 'POST',
@@ -293,18 +304,19 @@ qs('predictForm').addEventListener('submit', async (e) => {
     });
 
     const data = await response.json();
+
     if (!response.ok || !data.success) {
       throw new Error(data.error || 'Prediction failed');
     }
 
     render(data);
+
   } catch (err) {
     showError(err.message || 'Unable to complete prediction.');
   } finally {
     setLoading(false);
   }
 });
-
 // AUTO REFRESH EVERY 30 SEC
 setInterval(() => {
   document.getElementById("predictForm").dispatchEvent(new Event("submit"));
