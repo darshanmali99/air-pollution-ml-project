@@ -288,6 +288,12 @@ qs('predictForm').addEventListener('submit', async (e) => {
     setLoading(false);
   }
 });
+
+// AUTO REFRESH EVERY 30 SEC
+setInterval(() => {
+  document.getElementById("predictForm").dispatchEvent(new Event("submit"));
+}, 30000);
+
 </script>
 </body>
 </html>
