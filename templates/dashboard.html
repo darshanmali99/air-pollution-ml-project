@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Air Pollution Intelligence Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
+  <div class="max-w-7xl mx-auto px-6 py-8">
+    <header class="mb-6">
+      <h1 class="text-3xl font-semibold">Air Pollution Intelligence</h1>
+      <p class="text-slate-400 mt-1">ML + API enhanced monitoring dashboard</p>
+    </header>
+
+    <section id="warningBanner" class="mb-5 rounded-xl border px-4 py-3 text-sm font-medium hidden"></section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-5">
+      <article id="aqiCard" class="lg:col-span-5 rounded-2xl border border-white/10 p-6 shadow-xl bg-emerald-600/85 transition-colors duration-200">
+        <p class="text-xs uppercase tracking-[0.2em] text-white/85">AQI Status</p>
+        <div class="flex items-end gap-3 mt-3">
+          <p id="aqiValue" class="text-7xl font-bold leading-none">--</p>
+          <p id="aqiStatus" class="text-xl font-semibold pb-2">Unknown</p>
+        </div>
+        <p id="aqiMessage" class="mt-3 text-white/90">Run prediction for live insight.</p>
+      </article>
+
+      <article class="lg:col-span-7 grid sm:grid-cols-2 gap-4">
+        <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm"><p class="text-slate-400 text-sm">NO2</p><p id="no2Value" class="text-3xl mt-1 font-semibold">--</p></div>
+        <div class="rounded-xl border border-slate-800 bg-slate-900 p-4 shadow-sm"><p class="text-slate-400 text-sm">O3</p><p id="o3Value" class="text-3xl mt-1 font-semibold">--</p></div>
+        <div class="rounded-xl border border-emerald-800/70 bg-emerald-900/30 p-4 shadow-sm"><p class="text-emerald-200 text-sm">Best Site</p><p id="bestSite" class="text-2xl mt-1 font-semibold">--</p></div>
+        <div class="rounded-xl border border-rose-800/70 bg-rose-900/30 p-4 shadow-sm"><p class="text-rose-200 text-sm">Worst Site</p><p id="worstSite" class="text-2xl mt-1 font-semibold">--</p></div>
+      </article>
+    </section>
+
+    <section class="grid grid-cols-1 lg:grid-cols-10 gap-5">
+      <article class="lg:col-span-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+        <h2 class="text-lg font-semibold mb-2">Predict Air Quality</h2>
+        <form id="predictForm" class="space-y-3">
+          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="site" type="number" min="1" max="7" value="1" placeholder="Site (1-7)" />
+          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="temp" type="number" step="any" placeholder="Temperature (optional)" />
+          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="humidity" type="number" step="any" placeholder="Humidity (optional)" />
+          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="wind" type="number" step="any" placeholder="Wind (optional)" />
+          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="sat_no2" type="number" step="any" placeholder="NO2 Satellite (optional)" />
+          <input class="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" name="hcho" type="number" step="any" placeholder="HCHO Satellite (optional)" />
+          <button id="submitBtn" class="w-full rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-semibold py-2.5 transition disabled:opacity-60 flex items-center justify-center gap-2">
+            <svg id="spinner" class="hidden h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+            <span id="btnText">Run Prediction</span>
+          </button>
+        </form>
+
+        <div class="mt-6 border-t border-slate-800 pt-4">
+          <h3 class="text-md font-semibold mb-2">AI Chatbot</h3>
+          <div id="chatLog" class="h-40 overflow-auto rounded-lg bg-slate-800 border border-slate-700 p-3 text-sm space-y-2 mb-2"></div>
+          <div class="flex gap-2">
+            <input id="chatInput" class="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2" placeholder="Is air quality safe?" />
+            <button id="chatSendBtn" class="rounded-lg bg-indigo-500 px-3 py-2 font-semibold">Send</button>
+          </div>
+        </div>
+
+        <p id="errorBox" class="hidden mt-4 rounded-lg border border-rose-700/60 bg-rose-900/40 px-3 py-2 text-sm text-rose-200"></p>
+      </article>
+
+      <article class="lg:col-span-6 grid grid-rows-2 gap-4 rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-lg">
+        <div class="h-full">
+          <h2 class="text-lg font-semibold mb-2">AQI Trend (Current vs Forecast)</h2>
+          <div class="h-[240px]"><canvas id="aqiChart"></canvas></div>
+        </div>
+        <div class="h-full">
+          <h2 class="text-lg font-semibold mb-2">AQI Heatmap</h2>
+          <div id="map" class="h-[240px] rounded-xl border border-slate-700"></div>
+        </div>
+      </article>
+    </section>
+  </div>
+
+<script>
+const qs = (id) => document.getElementById(id);
+const errorBox = qs('errorBox');
+const submitBtn = qs('submitBtn');
+const spinner = qs('spinner');
+const btnText = qs('btnText');
+const warningBanner = qs('warningBanner');
+const chatLog = qs('chatLog');
+let trendChart = null;
+let map = null;
+let heatLayer = null;
+
+function safeText(id, value) {
+  const el = qs(id);
+  if (el) el.textContent = value;
+}
+
+function setLoading(isLoading) {
+  submitBtn.disabled = isLoading;
+  spinner.classList.toggle('hidden', !isLoading);
+  btnText.textContent = isLoading ? 'Predicting...' : 'Run Prediction';
+}
+
+function showError(message) {
+  if (!errorBox) return;
+  errorBox.textContent = message;
+  errorBox.classList.remove('hidden');
+}
+
+function clearError() {
+  if (!errorBox) return;
+  errorBox.classList.add('hidden');
+  errorBox.textContent = '';
+}
+
+function applyAqiUI(status, warning) {
+  const card = qs('aqiCard');
+  if (!card) return;
+  card.classList.remove('bg-emerald-600/85', 'bg-amber-500/85', 'bg-rose-500/85', 'bg-slate-700/85');
+
+  const config = {
+    Good: { cls: 'bg-emerald-600/85', banner: 'hidden' },
+    Moderate: { cls: 'bg-amber-500/85', banner: 'amber' },
+    Poor: { cls: 'bg-rose-500/85', banner: 'rose' },
+  };
+  const theme = config[status] || { cls: 'bg-slate-700/85', banner: 'rose' };
+  card.classList.add(theme.cls);
+
+  if (theme.banner === 'hidden') {
+    warningBanner.classList.add('hidden');
+  } else {
+    warningBanner.className = `mb-5 rounded-xl border px-4 py-3 text-sm font-medium ${theme.banner === 'rose' ? 'border-rose-700/60 bg-rose-900/40 text-rose-100' : 'border-amber-700/60 bg-amber-900/40 text-amber-100'}`;
+    warningBanner.textContent = warning;
+    warningBanner.classList.remove('hidden');
+  }
+}
+
+function renderTrendChart(labels, currentSeries, forecastSeries) {
+  const canvas = qs('aqiChart');
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  if (trendChart) trendChart.destroy();
+
+  trendChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Current AQI',
+          data: currentSeries,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56,189,248,0.15)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+        },
+        {
+          label: 'Forecast AQI',
+          data: forecastSeries,
+          borderColor: '#f59e0b',
+          backgroundColor: 'rgba(245,158,11,0.12)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+        },
+      ]
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#cbd5e1' } } },
+      scales: {
+        x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.08)' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(148,163,184,0.15)' } },
+      }
+    }
+  });
+}
+
+function initMap() {
+  if (map || typeof L === 'undefined') return;
+  map = L.map('map').setView([20.5937, 78.9629], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+}
+
+function updateHeatmap(points) {
+  if (!map || typeof L.heatLayer === 'undefined') return;
+  if (heatLayer) map.removeLayer(heatLayer);
+
+  const fallback = [
+    [19.0760, 72.8777, 0.5], [28.7041, 77.1025, 0.7], [13.0827, 80.2707, 0.55],
+    [22.5726, 88.3639, 0.65], [12.9716, 77.5946, 0.6], [17.3850, 78.4867, 0.58], [18.5204, 73.8567, 0.52]
+  ];
+
+  heatLayer = L.heatLayer((points && points.length ? points : fallback), {
+    radius: 28,
+    blur: 22,
+    maxZoom: 10,
+    gradient: {0.2: '#22c55e', 0.5: '#f59e0b', 0.8: '#ef4444'}
+  }).addTo(map);
+}
+
+function appendChat(role, text) {
+  const line = document.createElement('div');
+  line.className = role === 'user' ? 'text-cyan-300' : 'text-slate-200';
+  line.textContent = `${role === 'user' ? 'You' : 'AI'}: ${text}`;
+  chatLog.appendChild(line);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+async function sendChat() {
+  const input = qs('chatInput');
+  const text = (input.value || '').trim();
+  if (!text) return;
+
+  appendChat('user', text);
+  input.value = '';
+
+  try {
+    const response = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text }),
+    });
+    const data = await response.json();
+    appendChat('ai', data.reply || 'No response available.');
+  } catch (err) {
+    appendChat('ai', 'Unable to reach assistant right now.');
+  }
+}
+
+function render(data) {
+  safeText('aqiValue', Number(data.aqi || 0).toFixed(2));
+  safeText('aqiStatus', data.status || 'Unknown');
+  safeText('aqiMessage', data.warning || 'No advisory available.');
+  safeText('no2Value', Number(data.no2 || 0).toFixed(2));
+  safeText('o3Value', Number(data.o3 || 0).toFixed(2));
+  safeText('bestSite', data.best_site || 'N/A');
+  safeText('worstSite', data.worst_site || 'N/A');
+
+  applyAqiUI(data.status || 'Unknown', data.warning || 'AQI warning unavailable.');
+
+  renderTrendChart(
+    data.labels || ['Now', '+1h', '+2h', '+3h', '+4h', '+5h', '+6h'],
+    data.current_aqi_series || [50, 50, 50, 50, 50, 50, 50],
+    data.forecast_aqi_series || [55, 53, 57, 60, 62, 58, 56]
+  );
+
+  updateHeatmap(data.heatmap_points || []);
+}
+
+qs('chatSendBtn').addEventListener('click', sendChat);
+qs('chatInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendChat();
+  }
+});
+
+initMap();
+updateHeatmap([]);
+
+qs('predictForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError();
+  setLoading(true);
+
+  try {
+    const formData = new FormData(e.target);
+    const payload = Object.fromEntries(formData.entries());
+    Object.keys(payload).forEach((k) => payload[k] === '' && delete payload[k]);
+
+    const response = await fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Prediction failed');
+    }
+
+    render(data);
+  } catch (err) {
+    showError(err.message || 'Unable to complete prediction.');
+  } finally {
+    setLoading(false);
+  }
+});
+</script>
+</body>
+</html>
