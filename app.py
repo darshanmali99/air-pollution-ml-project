@@ -139,12 +139,22 @@ def predict():
         best_site = min(site_comparison, key=site_comparison.get)
         worst_site = max(site_comparison, key=site_comparison.get)
 
-        return jsonify({
+        no2_value = round(no2, 2)
+        o3_value = round(o3, 2)
+        response = {
             "success": True,
+            "aqi": aqi,
+            "no2": no2_value,
+            "o3": o3_value,
+            "status": status,
+            "best_site": best_site,
+            "worst_site": worst_site,
+            "advice": get_advice(status),
+            "aqi_by_site": site_comparison,
             "input": {"site": site},
             "prediction": {
-                "no2": round(no2, 2),
-                "o3": round(o3, 2),
+                "no2": no2_value,
+                "o3": o3_value,
                 "aqi": aqi,
                 "status": status,
                 "advice": get_advice(status),
@@ -154,13 +164,14 @@ def predict():
                 "best_site": best_site,
                 "worst_site": worst_site,
             },
-        })
+        }
+        return jsonify(response)
     except ValueError as exc:
-        return jsonify({"success": False, "error": str(exc)}), 400
+        return jsonify({"success": False, "error": str(exc), "aqi": 0.0, "no2": 0.0, "o3": 0.0, "status": "Unknown", "best_site": "N/A", "worst_site": "N/A", "aqi_by_site": {}}), 400
     except FileNotFoundError as exc:
-        return jsonify({"success": False, "error": str(exc)}), 404
+        return jsonify({"success": False, "error": str(exc), "aqi": 0.0, "no2": 0.0, "o3": 0.0, "status": "Unknown", "best_site": "N/A", "worst_site": "N/A", "aqi_by_site": {}}), 404
     except Exception as exc:
-        return jsonify({"success": False, "error": f"Internal server error: {exc}"}), 500
+        return jsonify({"success": False, "error": f"Internal server error: {exc}", "aqi": 0.0, "no2": 0.0, "o3": 0.0, "status": "Unknown", "best_site": "N/A", "worst_site": "N/A", "aqi_by_site": {}}), 500
 
 
 @app.get("/metrics")

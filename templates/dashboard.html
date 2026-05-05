@@ -6,13 +6,6 @@
   <title>Air Pollution Intelligence Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    :root {
-      --good: #10b981;
-      --moderate: #f59e0b;
-      --poor: #ef4444;
-    }
-  </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen antialiased">
   <div class="max-w-7xl mx-auto px-6 py-10">
@@ -78,27 +71,47 @@
       <article class="lg:col-span-8 rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">
         <h2 class="text-lg font-semibold">Site AQI Comparison</h2>
         <p class="text-sm text-slate-400 mt-1 mb-4">Cross-site AQI snapshot for operational decisions.</p>
-        <canvas id="aqiChart" height="120"></canvas>
+        <div class="h-80"><canvas id="aqiChart"></canvas></div>
       </article>
     </section>
   </div>
 
 <script>
-const errorBox = document.getElementById('errorBox');
-const submitBtn = document.getElementById('submitBtn');
-const spinner = document.getElementById('spinner');
-const btnText = document.getElementById('btnText');
-const alertBanner = document.getElementById('alertBanner');
-const aqiHero = document.getElementById('aqiHero');
-let chart;
+const qs = (id) => document.getElementById(id);
+const errorBox = qs('errorBox');
+const submitBtn = qs('submitBtn');
+const spinner = qs('spinner');
+const btnText = qs('btnText');
+const alertBanner = qs('alertBanner');
+const aqiHero = qs('aqiHero');
+let chart = null;
+
+function safeText(id, value) {
+  const el = qs(id);
+  if (el) el.textContent = value;
+}
 
 function setLoading(isLoading) {
-  submitBtn.disabled = isLoading;
-  spinner.classList.toggle('hidden', !isLoading);
-  btnText.textContent = isLoading ? 'Predicting...' : 'Run Prediction';
+  if (submitBtn) submitBtn.disabled = isLoading;
+  if (spinner) spinner.classList.toggle('hidden', !isLoading);
+  if (btnText) btnText.textContent = isLoading ? 'Predicting...' : 'Run Prediction';
+}
+
+function showError(message) {
+  console.error('[dashboard]', message);
+  if (!errorBox) return;
+  errorBox.textContent = message;
+  errorBox.classList.remove('hidden');
+}
+
+function clearError() {
+  if (!errorBox) return;
+  errorBox.classList.add('hidden');
+  errorBox.textContent = '';
 }
 
 function setAlert(status, message) {
+  if (!alertBanner) return;
   if (status === 'Moderate' || status === 'Poor') {
     const isPoor = status === 'Poor';
     alertBanner.className = `mb-6 rounded-xl border px-4 py-3 text-sm font-medium shadow-sm ${isPoor ? 'border-rose-700/60 bg-rose-900/45 text-rose-100' : 'border-amber-700/60 bg-amber-900/45 text-amber-100'}`;
@@ -110,36 +123,56 @@ function setAlert(status, message) {
 }
 
 function applyAqiTheme(status) {
-  aqiHero.classList.remove('bg-emerald-600/85', 'bg-amber-500/85', 'bg-rose-500/85');
+  if (!aqiHero) return;
+  aqiHero.classList.remove('bg-emerald-600/85', 'bg-amber-500/85', 'bg-rose-500/85', 'bg-slate-700/85');
   const config = {
     Good: ['bg-emerald-600/85', 'Air quality is Good — outdoor activity is generally safe.'],
     Moderate: ['bg-amber-500/85', '⚠ Air Quality is Moderate — Sensitive groups should reduce outdoor exposure.'],
-    Poor: ['bg-rose-500/85', '⚠ Air Quality is Poor — Avoid outdoor activities.']
+    Poor: ['bg-rose-500/85', '⚠ Air Quality is Poor — Avoid outdoor activities.'],
+    Unknown: ['bg-slate-700/85', 'Prediction unavailable. Please retry.']
   };
-  const [bgClass, alertText] = config[status] || config.Good;
+  const [bgClass, alertText] = config[status] || config.Unknown;
   aqiHero.classList.add(bgClass);
   setAlert(status, alertText);
 }
 
-function renderSummary(prediction, comparison) {
-  document.getElementById('aqiValue').textContent = prediction.aqi;
-  document.getElementById('aqiStatus').textContent = prediction.status;
-  document.getElementById('aqiAdvice').textContent = prediction.advice;
-  document.getElementById('no2Value').textContent = prediction.no2;
-  document.getElementById('o3Value').textContent = prediction.o3;
-  document.getElementById('bestSite').textContent = comparison.best_site;
-  document.getElementById('worstSite').textContent = comparison.worst_site;
-  applyAqiTheme(prediction.status);
+function normalizeResponse(data) {
+  return {
+    aqi: Number(data?.aqi ?? data?.prediction?.aqi ?? 0).toFixed(2),
+    no2: Number(data?.no2 ?? data?.prediction?.no2 ?? 0).toFixed(2),
+    o3: Number(data?.o3 ?? data?.prediction?.o3 ?? 0).toFixed(2),
+    status: data?.status ?? data?.prediction?.status ?? 'Unknown',
+    advice: data?.advice ?? data?.prediction?.advice ?? 'Prediction unavailable.',
+    best_site: data?.best_site ?? data?.site_comparison?.best_site ?? 'N/A',
+    worst_site: data?.worst_site ?? data?.site_comparison?.worst_site ?? 'N/A',
+    aqi_by_site: data?.aqi_by_site ?? data?.site_comparison?.aqi_by_site ?? {}
+  };
+}
 
-  if (chart) chart.destroy();
-  const ctx = document.getElementById('aqiChart');
-  chart = new Chart(ctx, {
+function renderChart(aqiBySite) {
+  const canvas = qs('aqiChart');
+  if (!canvas || typeof Chart === 'undefined') {
+    console.error('[dashboard] Chart.js missing or canvas not found');
+    return;
+  }
+
+  const labels = Object.keys(aqiBySite || {});
+  const values = Object.values(aqiBySite || {});
+  const safeLabels = labels.length ? labels : ['No Data'];
+  const safeValues = values.length ? values : [0];
+
+  if (chart) {
+    chart.destroy();
+    chart = null;
+  }
+
+  chart = new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
-      labels: Object.keys(comparison.aqi_by_site),
+      labels: safeLabels,
       datasets: [{
         label: 'AQI by Site',
-        data: Object.values(comparison.aqi_by_site),
+        data: safeValues,
         backgroundColor: ['#34d399', '#2dd4bf', '#22d3ee', '#38bdf8', '#60a5fa', '#fbbf24', '#fb7185'],
         borderRadius: 6,
         barThickness: 28
@@ -147,58 +180,73 @@ function renderSummary(prediction, comparison) {
     },
     options: {
       maintainAspectRatio: false,
-      layout: { padding: { top: 8, right: 8, bottom: 0, left: 0 } },
-      plugins: {
-        legend: { display: false }
-      },
+      plugins: { legend: { display: false } },
       scales: {
-        x: {
-          ticks: { color: '#94a3b8', font: { size: 12 } },
-          grid: { display: false }
-        },
-        y: {
-          beginAtZero: true,
-          ticks: { color: '#94a3b8', font: { size: 12 } },
-          grid: { color: 'rgba(148,163,184,0.18)' }
-        }
+        x: { ticks: { color: '#94a3b8', font: { size: 12 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: '#94a3b8', font: { size: 12 } }, grid: { color: 'rgba(148,163,184,0.18)' } }
       }
     }
   });
 }
 
-document.getElementById('predictForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  errorBox.classList.add('hidden');
-  setLoading(true);
+function renderSummary(rawData) {
+  const data = normalizeResponse(rawData);
+  safeText('aqiValue', data.aqi);
+  safeText('aqiStatus', data.status);
+  safeText('aqiAdvice', data.advice);
+  safeText('no2Value', data.no2);
+  safeText('o3Value', data.o3);
+  safeText('bestSite', data.best_site);
+  safeText('worstSite', data.worst_site);
+  applyAqiTheme(data.status);
+  renderChart(data.aqi_by_site);
+}
 
-  try {
-    const formData = new FormData(e.target);
-    const payload = Object.fromEntries(formData.entries());
-    for (const key of Object.keys(payload)) {
-      if (payload[key] === '') delete payload[key];
+const form = qs('predictForm');
+if (form) {
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearError();
+    setLoading(true);
+
+    try {
+      const formData = new FormData(form);
+      const payload = Object.fromEntries(formData.entries());
+      for (const key of Object.keys(payload)) {
+        if (payload[key] === '') delete payload[key];
+      }
+
+      const response = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        console.error('[dashboard] Invalid JSON response', parseError);
+        throw new Error('Invalid server response format.');
+      }
+
+      console.log('[dashboard] /predict response', data);
+
+      if (!response.ok || !data.success) {
+        renderSummary(data);
+        showError(data?.error || 'Prediction failed. Please verify inputs and retry.');
+        return;
+      }
+
+      renderSummary(data);
+    } catch (err) {
+      renderSummary({});
+      showError(err?.message || 'Network or server issue. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    const response = await fetch('/predict', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      errorBox.textContent = data.error || 'Prediction failed. Please verify inputs and retry.';
-      errorBox.classList.remove('hidden');
-      return;
-    }
-
-    renderSummary(data.prediction, data.site_comparison);
-  } catch (_) {
-    errorBox.textContent = 'Network or server issue. Please try again.';
-    errorBox.classList.remove('hidden');
-  } finally {
-    setLoading(false);
-  }
-});
+  });
+}
 </script>
 </body>
 </html>
