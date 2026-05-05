@@ -128,7 +128,7 @@ def predict():
         "no2": no2,
         "o3": o3,
         "temp": temp,
-        "humidity": hum,
+        "humidity": humidity,
         "status": status,
         "warning": get_advice(status),
         "best_site": best,
