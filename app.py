@@ -45,6 +45,22 @@ class ModelRegistry:
 model_registry = ModelRegistry(BASE_DIR)
 model_registry.load()
 
+# ================= WEATHER API (ADDED) =================
+def get_weather():
+    if not OPENWEATHER_API_KEY:
+        return {"temp": 30, "humidity": 50}
+
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat=19.9975&lon=73.7898&appid={OPENWEATHER_API_KEY}&units=metric"
+
+    try:
+        data = requests.get(url).json()
+        return {
+            "temp": data["main"]["temp"],
+            "humidity": data["main"]["humidity"]
+        }
+    except:
+        return {"temp": 30, "humidity": 50}
+
 # ================= UTILS =================
 def safe_float(val, default=0.0):
     try:
@@ -79,8 +95,8 @@ def build_features(site, payload):
         temp,
         humidity,
         wind,
-        wind * 0.1,   # 🔥 dynamic
-        wind * 0.05,  # 🔥 dynamic
+        wind * 0.1,
+        wind * 0.05,
         safe_float(payload.get("sat_no2"), 20),
         safe_float(payload.get("hcho"), 5),
     ]]
@@ -109,7 +125,9 @@ def predict():
 
         status = get_status(aqi)
 
-        # 🔥 SITE COMPARISON (STRONG VARIATION)
+        # ✅ GET WEATHER
+        weather = get_weather()
+
         site_data = {}
         heatmap = []
 
@@ -132,7 +150,6 @@ def predict():
         best_site = min(site_data, key=site_data.get)
         worst_site = max(site_data, key=site_data.get)
 
-        # 🔥 FORECAST (VISIBLE CHANGE)
         forecast = [round(aqi + (i * 2), 2) for i in range(7)]
 
         return jsonify({
@@ -140,6 +157,11 @@ def predict():
             "aqi": aqi,
             "no2": round(no2, 2),
             "o3": round(o3, 2),
+
+            # ✅ ADDED FOR UI
+            "temp": weather["temp"],
+            "humidity": weather["humidity"],
+
             "status": status,
             "warning": get_warning(status),
 
@@ -172,6 +194,5 @@ def chat():
 
     return jsonify({"reply": reply})
 
-# ================= RUN =================
 if __name__ == "__main__":
     app.run(debug=True)
